@@ -54,6 +54,18 @@ def create_binary_MNIST(data_dir, class1=1, class2=7):
     return mnist_train, mnist_test
 
 
+def preproc_binary_MNIST(inputs, targets):
+    """Modifies minibatch to suit for training binary MNIST
+    logistic regression classifier under BCEWithLogitsLoss.
+
+    :inputs, targets: the minibatch to be preprocessed
+    :returns: the preprocessed versions of `inputs`, `targets`
+    """
+    inputs = inputs.reshape(-1, 28*28)
+    targets = targets.reshape(-1,1).float()
+    return inputs, targets
+
+
 def main():
     # Model: Logistic Regression to distinguish between 1 and 7
     # NOTE) Use `nn.BCEWithLogitsLoss` for the missing sigmoid
@@ -83,8 +95,7 @@ def main():
             optimizer.zero_grad()
             
             # Reshaping needed for `nn.BCEWithLogitsLoss`
-            input = input.reshape(-1,28*28)
-            target = target.reshape(-1,1).float()
+            input, target = preproc_binary_MNIST(input, target)
             
             count_total += target.shape[0]
             
