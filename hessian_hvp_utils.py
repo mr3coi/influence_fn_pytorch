@@ -20,8 +20,8 @@ def hessian_vector_product(ys, params, vs):
     grad_v_prods = [gr * v.detach() for gr, v in zip(grads1, vs)]    # Element-wise multiply
     grad_outputs2 = [torch.ones_like(gvp) for gvp in grad_v_prods]
     grads2 = grad(grad_v_prods, params,
-                           grad_outputs=grad_outputs2,
-                           allow_unused=True)
+                  grad_outputs=grad_outputs2,
+                  allow_unused=True)
     """
     grads2 = grad(grads1, params, grad_outputs=vs)
     return grads2

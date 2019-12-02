@@ -61,7 +61,7 @@ def preproc_binary_MNIST(inputs, targets):
     :inputs, targets: the minibatch to be preprocessed
     :returns: the preprocessed versions of `inputs`, `targets`
     """
-    inputs = inputs.reshape(-1, 28*28)
+    inputs = inputs.reshape(-1, 28*28).float()
     targets = targets.reshape(-1,1).float()
     return inputs, targets
 

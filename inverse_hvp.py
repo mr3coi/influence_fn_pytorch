@@ -7,7 +7,7 @@ from torch.autograd import grad
 from torch import nn
 from torch.utils.data import DataLoader
 
-from hessian_hvp import hessian_vector_product, hessians
+from hessian_hvp_utils import hessian_vector_product, hessians
 from mnist_logistic_binary import create_binary_MNIST, preproc_binary_MNIST
 
 DATA_DIR = "./data"
@@ -85,6 +85,9 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
         data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         
         for it, (batch_inputs, batch_targets) in enumerate(data_loader):
+            if it >= recursion_depth:
+                break
+
             if preproc_data_fn is not None:
                 batch_inputs, batch_targets = preproc_data_fn(batch_inputs, batch_targets)
                 
@@ -93,9 +96,6 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
             hvp = hessian_vector_product(loss, params, cur_estimate)
             cur_estimate = [v + (1-damping) * ce - hv / scale for (v, ce, hv) in zip(vs, cur_estimate, hvp)]
             
-            if it >= recursion_depth:
-                break
-        
         inverse_hvp = [hv1 + hv2 / scale for (hv1, hv2) in zip(inverse_hvp, cur_estimate)] \
                        if inverse_hvp is not None else [hv2 / scale for hv2 in cur_estimate]
     
