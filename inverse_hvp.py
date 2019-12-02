@@ -93,7 +93,7 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
                 
             loss = criterion(model(batch_inputs), batch_targets)
             
-            hvp = hessian_vector_product(loss, params, cur_estimate)
+            hvp = hessian_vector_product(loss, params, vs=cur_estimate)
             cur_estimate = [v + (1-damping) * ce - hv / scale for (v, ce, hv) in zip(vs, cur_estimate, hvp)]
             
         inverse_hvp = [hv1 + hv2 / scale for (hv1, hv2) in zip(inverse_hvp, cur_estimate)] \

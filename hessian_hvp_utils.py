@@ -7,15 +7,20 @@ from torch.autograd import grad
 from torch import nn
 
 
-def hessian_vector_product(ys, params, vs):
+def hessian_vector_product(ys, params, params2=None, vs):
     """
     :ys: scalar that is to be differentiated
     :params: list of vectors (torch.tensors) w.r.t. each of
             which the hessian is computed
+    :params2: another list of params for second `grad` call
+            in case the second derivation is w.r.t. a
+            different set of parameters
     :vs: the list of vectors each of which is to be multiplied
             to the hessian w.r.t. each parameter
     """
     grads1 = grad(ys, params, create_graph=True)
+    if params2 is not None:
+        params = params2
     """Deprecated, does the same work as below
     grad_v_prods = [gr * v.detach() for gr, v in zip(grads1, vs)]    # Element-wise multiply
     grad_outputs2 = [torch.ones_like(gvp) for gvp in grad_v_prods]
