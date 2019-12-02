@@ -15,7 +15,17 @@ LRG_MODEL_PATH = "./model/mnist_logistic_reg.pt"
 
 
 def get_inverse_hvp(model, criterion, dataset, vs,
-                                 approx_type="cg", approx_params={}, preproc_data_fn=None):
+                    approx_type="cg", approx_params={}, preproc_data_fn=None):
+    """Wrapper for the two inverse-hvp computation methods.
+
+    :model, criterion, dataset: needed to compute empirical risk
+    :vs: list of vectors in the inverse-hvp, one per each parameter
+    :approx_type: choice of method, 'cg' or 'lissa'
+    :approx_params: parameters specific to 'lissa' method
+    :preproc_data_fn: function to preprocess each minibatch
+            from `dataset`
+    :returns: list of inverse-hvps computed per each param
+    """
     if approx_type == "cg":
         return get_inverse_hvp_cg(model, criterion, dataset, vs,
                                                    preproc_data_fn=preproc_data_fn)
@@ -26,27 +36,28 @@ def get_inverse_hvp(model, criterion, dataset, vs,
         raise NotImplementedError("ERROR: Only types 'cg' and 'lissa' are supported")
 
         
-def get_inverse_hvp_cg(model, criterion, dataset, vs):
+def get_inverse_hvp_cg(model, criterion, dataset, vs,
+                       preproc_data_fn=None):
     """
     Compute the product of inverse hessian of empirical risk
     and the given vector 'v' using conjugate gradient method.
     
-    :loss: the empirical risk from the model of interest
-    :params: trainable parameters of the model
-    :v: the "v"ector in the inverse-hvp
+    :model, criterion, dataset: needed to compute empirical risk
+    :vs: list of vectors in the inverse-hvp, one per each parameter
+    :preproc_data_fn: function to preprocess each minibatch
+            from `dataset`
+    :returns: list of inverse-hvps computed per each param
     """
     raise NotImplementedError("ERROR: 'cg' has not yet been implemented")
 
     
-def get_inverse_hvp_lissa(model, criterion,
-                                         dataset,
-                                         vs,
-                                         batch_size=1,
-                                         scale=10,
-                                         damping=0.0,
-                                         num_repeats=1,
-                                         recursion_depth=10000,
-                                         preproc_data_fn=None):
+def get_inverse_hvp_lissa(model, criterion, dataset, vs,
+                          batch_size=1,
+                          scale=10,
+                          damping=0.0,
+                          num_repeats=1,
+                          recursion_depth=10000,
+                          preproc_data_fn=None):
     """
     Compute the product of inverse hessian of empirical risk
     and the given vector 'v' numerically using LiSSA algorithm.
@@ -54,12 +65,13 @@ def get_inverse_hvp_lissa(model, criterion,
     :model: the model of interest
     :criterion: the objective used to compute loss
     :inputs, targets: dataset to compute loss with
-    :vs: the 'v'ector in the inverse-hvp for each param in model
+    :vs: list of vectors in the inverse-hvp, one per each parameter
     :batch_size: size of minibatch sample at each iteration
     :scale: the factor to scale down loss (to keep hessian <= I)
     :damping: lambda added to guarantee hessian be p.d.
     :num_repeats: hyperparameter 'r' in in the paper (to reduce variance)
     :recursion_depth: number of iterations for LiSSA algorithm
+    :returns: list of inverse-hvps computed per each param
     """
     inverse_hvp = None
     
