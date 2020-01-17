@@ -1,6 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+"""Written by Sungjun Choi, CMU MSML'19.
+
+Contains function that computes the inverse-HVP
+of a function (PyTorch computational graph)
+w.r.t. parameters in the two ways specified
+in the original paper.
+"""
+
 import torch
 import numpy as np
 from torch.autograd import grad
@@ -137,9 +145,7 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
 
 
 if __name__ == "__main__":
-    
     # Target model
-
     logistic_reg = nn.Sequential(
         nn.Linear(784,1, bias=True),
         #nn.Sigmoid()
@@ -148,7 +154,6 @@ if __name__ == "__main__":
     params = list(logistic_reg.parameters())
 
     # Test code
-
     mnist_train, mnist_test = create_binary_MNIST(data_dir=DATA_DIR)
     sample_vs = [torch.ones_like(param) for param in logistic_reg.parameters()]
     lissa_params = {
@@ -159,13 +164,13 @@ if __name__ == "__main__":
     }
 
     inverse_hvp = get_inverse_hvp(logistic_reg,
-                                                     nn.BCEWithLogitsLoss(),
-                                                     mnist_train,
-                                                     sample_vs,
-                                                     approx_type="lissa",
-                                                     approx_params=lissa_params,
-                                                     preproc_data_fn=preproc_binary_mnist,
-                                                    )
+                                  nn.BCEWithLogitsLoss(),
+                                  mnist_train,
+                                  sample_vs,
+                                  approx_type="lissa",
+                                  approx_params=lissa_params,
+                                  preproc_data_fn=preproc_binary_mnist,
+                                 )
 
     for item in inverse_hvp:
         print(item.shape)

@@ -1,22 +1,29 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+"""Written by Sungjun Choi, CMU MSML'19.
+
+Contains functions that compute the HVP and
+hessian of functions (PyTorch computational
+graphs) w.r.t. parameters.
+"""
+
 import torch
 import numpy as np
 from torch.autograd import grad
 from torch import nn
 
 
-def hessian_vector_product(ys, params, params2=None, vs):
+def hessian_vector_product(ys, params, vs, params2=None):
     """
     :ys: scalar that is to be differentiated
     :params: list of vectors (torch.tensors) w.r.t. each of
             which the hessian is computed
+    :vs: the list of vectors each of which is to be multiplied
+            to the hessian w.r.t. each parameter
     :params2: another list of params for second `grad` call
             in case the second derivation is w.r.t. a
             different set of parameters
-    :vs: the list of vectors each of which is to be multiplied
-            to the hessian w.r.t. each parameter
     """
     grads1 = grad(ys, params, create_graph=True)
     if params2 is not None:

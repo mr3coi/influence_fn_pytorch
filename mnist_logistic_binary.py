@@ -1,3 +1,13 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+"""Written by Sungjun Choi, CMU MSML'19.
+
+Trains a PyTorch MNIST classifier that classifies
+between **two** of the ten classes and stores the
+trained model in {MODEL_DIR} directory for future
+use, with filename {MODEL_FILENAME}.
+"""
 import torch
 from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor
@@ -7,10 +17,11 @@ from torch import nn, optim
 
 import os
 
-# Directories
+# Directories & File names
 
 DATA_DIR = "./data"
 MODEL_DIR = "./model"
+MODEL_FILENAME = "mnist_logistic_reg.pt"
 
 # Hyperparameters
 
@@ -132,7 +143,7 @@ def main():
     if not os.path.exists(MODEL_DIR):
         os.makedirs(MODEL_DIR)
 
-    with open(os.path.join(MODEL_DIR, "mnist_logistic_reg.pt"), 'wb') as state_dict_f:
+    with open(os.path.join(MODEL_DIR, MODEL_FILENAME), 'wb') as state_dict_f:
         torch.save(logistic_reg.state_dict(), state_dict_f)
 
     print(">>> Model saved to disk")
