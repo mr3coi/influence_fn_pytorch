@@ -5,7 +5,7 @@ import torch
 import numpy as np
 from torch.autograd import grad
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader
 
 from hessian_hvp_utils import hessian_vector_product, hessians
 from mnist_logistic_binary import create_binary_MNIST, preproc_binary_MNIST
@@ -80,21 +80,52 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
     
     params = list(model.parameters())
     
-    for rep in range(num_repeats):
-        cur_estimate = vs
+    if isinstance(dataset, Dataset):
         data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    else:
+        try:
+            data_loader = iter(dataset)
+        except:
+            raise
         
-        for it, (batch_inputs, batch_targets) in enumerate(data_loader):
-            if it >= recursion_depth:
-                break
+    for rep in range(num_repeats):
+        if not isinstance(data_loader,DataLoader):
+            cur_estimate = vs
+            idx = 0
+            while idx + batch_size <= len(dataset):
+                if idx / batch_size >= recursion_depth:
+                    break
 
-            if preproc_data_fn is not None:
-                batch_inputs, batch_targets = preproc_data_fn(batch_inputs, batch_targets)
+                inputs, targets = dataset[idx]
+                if preproc_data_fn is not None:
+                    inputs, targets = preproc_data_fn(inputs, targets)
+
+                loss = criterion(model(inputs), targets)
+                for i in range(idx+1,idx+batch_size):
+                    inputs, targets = dataset[i]
+                    if preproc_data_fn is not None:
+                        inputs, targets = preproc_data_fn(inputs, targets)
+                    loss += criterion(model(inputs), targets)
+
+                loss /= batch_size
                 
-            loss = criterion(model(batch_inputs), batch_targets)
-            
-            hvp = hessian_vector_product(loss, params, vs=cur_estimate)
-            cur_estimate = [v + (1-damping) * ce - hv / scale for (v, ce, hv) in zip(vs, cur_estimate, hvp)]
+                hvp = hessian_vector_product(loss, params, vs=cur_estimate)
+                cur_estimate = [v + (1-damping) * ce - hv / scale for (v, ce, hv) in zip(vs, cur_estimate, hvp)]
+                idx += batch_size
+        else:
+            cur_estimate = vs
+            for it, (batch_inputs, batch_targets) in enumerate(data_loader):
+                if it >= recursion_depth:
+                    break
+
+                if preproc_data_fn is not None:
+                    batch_inputs, batch_targets = preproc_data_fn(batch_inputs, batch_targets)
+
+                loss = criterion(model(batch_inputs), batch_targets) / batch_size
+
+                hvp = hessian_vector_product(loss, params, vs=cur_estimate)
+                #print(max([torch.max(item) for item in cur_estimate]))
+                cur_estimate = [v + (1-damping) * ce - hv / scale for (v, ce, hv) in zip(vs, cur_estimate, hvp)]
             
         inverse_hvp = [hv1 + hv2 / scale for (hv1, hv2) in zip(inverse_hvp, cur_estimate)] \
                        if inverse_hvp is not None else [hv2 / scale for hv2 in cur_estimate]
