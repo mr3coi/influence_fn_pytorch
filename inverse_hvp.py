@@ -15,8 +15,8 @@ from torch.autograd import grad
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 
-from hessian_hvp_utils import hessian_vector_product, hessians
-from mnist_logistic_binary import create_binary_MNIST, preproc_binary_MNIST
+from influence_fn_pytorch.hessian_hvp_utils import hessian_vector_product, hessians
+from influence_fn_pytorch.mnist_logistic_binary import create_binary_MNIST, preproc_binary_MNIST
 
 DATA_DIR = "./data"
 LRG_MODEL_PATH = "./model/mnist_logistic_reg.pt"
