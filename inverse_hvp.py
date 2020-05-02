@@ -23,36 +23,36 @@ LRG_MODEL_PATH = "./model/mnist_logistic_reg.pt"
 
 
 def get_inverse_hvp(model, criterion, dataset, vs,
-                    approx_type="cg", approx_params={}, preproc_data_fn=None):
+                    approx_type="cg", approx_params={}, collate_fn=None):
     """Wrapper for the two inverse-hvp computation methods.
 
     :model, criterion, dataset: needed to compute empirical risk
     :vs: list of vectors in the inverse-hvp, one per each parameter
     :approx_type: choice of method, 'cg' or 'lissa'
     :approx_params: parameters specific to 'lissa' method
-    :preproc_data_fn: function to preprocess each minibatch
+    :collate_fn: function to preprocess each minibatch
             from `dataset`
     :returns: list of inverse-hvps computed per each param
     """
     if approx_type == "cg":
         return get_inverse_hvp_cg(model, criterion, dataset, vs,
-                                                   preproc_data_fn=preproc_data_fn)
+                                  collate_fn=collate_fn)
     elif approx_type == "lissa":
         return get_inverse_hvp_lissa(model, criterion, dataset, vs,
-                                                      **approx_params, preproc_data_fn=preproc_data_fn)
+                                     **approx_params, collate_fn=collate_fn)
     else:
         raise NotImplementedError("ERROR: Only types 'cg' and 'lissa' are supported")
 
         
 def get_inverse_hvp_cg(model, criterion, dataset, vs,
-                       preproc_data_fn=None):
+                       collate_fn=None):
     """
     Compute the product of inverse hessian of empirical risk
     and the given vector 'v' using conjugate gradient method.
     
     :model, criterion, dataset: needed to compute empirical risk
     :vs: list of vectors in the inverse-hvp, one per each parameter
-    :preproc_data_fn: function to preprocess each minibatch
+    :collate_fn: function to preprocess each minibatch
             from `dataset`
     :returns: list of inverse-hvps computed per each param
     """
@@ -65,7 +65,8 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
                           damping=0.0,
                           num_repeats=1,
                           recursion_depth=10000,
-                          preproc_data_fn=None):
+                          collate_fn=None,
+                          verbose=False):
     """
     Compute the product of inverse hessian of empirical risk
     and the given vector 'v' numerically using LiSSA algorithm.
@@ -88,55 +89,35 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
     
     params = list(model.parameters())
     
-    if isinstance(dataset, Dataset):
-        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    else:
-        try:
-            data_loader = iter(dataset)
-        except:
-            raise
+    assert isinstance(dataset, Dataset), "ERROR: `dataset` must be PyTorch Dataset"
+    data_loader = DataLoader(dataset, batch_size=batch_size,
+                             shuffle=True, collate_fn=collate_fn)
         
     for rep in range(num_repeats):
-        if not isinstance(data_loader,DataLoader):
-            cur_estimate = vs
-            idx = 0
-            while idx + batch_size <= len(dataset):
-                if idx / batch_size >= recursion_depth:
-                    break
+        cur_estimate = vs
+        data_iter = iter(data_loader)   # To allow for multiple cycles through data_loader
+        for it in range(recursion_depth):
+            try:
+                batch_inputs, batch_targets = next(data_iter)
+            except StopIteration:
+                data_iter = iter(data_loader)
+                batch_inputs, batch_targets = next(data_iter)
 
-                inputs, targets = dataset[idx]
-                if preproc_data_fn is not None:
-                    inputs, targets = preproc_data_fn(inputs, targets)
+            if collate_fn is not None:
+                batch_inputs, batch_targets = collate_fn(batch_inputs, batch_targets)
 
-                loss = criterion(model(inputs), targets)
-                for i in range(idx+1,idx+batch_size):
-                    inputs, targets = dataset[i]
-                    if preproc_data_fn is not None:
-                        inputs, targets = preproc_data_fn(inputs, targets)
-                    loss += criterion(model(inputs), targets)
+            loss = criterion(model(batch_inputs), batch_targets) / batch_size
 
-                loss /= batch_size
-                
-                hvp = hessian_vector_product(loss, params, vs=cur_estimate)
-                cur_estimate = [v + (1-damping) * ce - hv / scale for (v, ce, hv) in zip(vs, cur_estimate, hvp)]
-                idx += batch_size
-        else:
-            cur_estimate = vs
-            for it, (batch_inputs, batch_targets) in enumerate(data_loader):
-                if it >= recursion_depth:
-                    break
+            hvp = hessian_vector_product(loss, params, vs=cur_estimate)
+            cur_estimate = [v + (1-damping) * ce - hv / scale \
+                            for (v, ce, hv) in zip(vs, cur_estimate, hvp)]
 
-                if preproc_data_fn is not None:
-                    batch_inputs, batch_targets = preproc_data_fn(batch_inputs, batch_targets)
-
-                loss = criterion(model(batch_inputs), batch_targets) / batch_size
-
-                hvp = hessian_vector_product(loss, params, vs=cur_estimate)
-                #print(max([torch.max(item) for item in cur_estimate]))
-                cur_estimate = [v + (1-damping) * ce - hv / scale for (v, ce, hv) in zip(vs, cur_estimate, hvp)]
+            if verbose and (it+1) % 100 == 0:
+                print(f">>> Completed iteration {it+1}")
             
         inverse_hvp = [hv1 + hv2 / scale for (hv1, hv2) in zip(inverse_hvp, cur_estimate)] \
-                       if inverse_hvp is not None else [hv2 / scale for hv2 in cur_estimate]
+                       if inverse_hvp is not None \
+                       else [hv2 / scale for hv2 in cur_estimate]
     
     # Average over repetitions
     inverse_hvp = [item / num_repeats for item in inverse_hvp]
@@ -169,7 +150,7 @@ if __name__ == "__main__":
                                   sample_vs,
                                   approx_type="lissa",
                                   approx_params=lissa_params,
-                                  preproc_data_fn=preproc_binary_mnist,
+                                  collate_fn=preproc_binary_mnist,
                                  )
 
     for item in inverse_hvp:
