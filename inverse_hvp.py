@@ -23,7 +23,10 @@ LRG_MODEL_PATH = "./model/mnist_logistic_reg.pt"
 
 
 def get_inverse_hvp(model, criterion, dataset, vs,
-                    approx_type="cg", approx_params={}, collate_fn=None):
+                    approx_type="cg",
+                    approx_params={},
+                    collate_fn=None,
+                    has_label=True,):
     """Wrapper for the two inverse-hvp computation methods.
 
     :model, criterion, dataset: needed to compute empirical risk
@@ -39,13 +42,15 @@ def get_inverse_hvp(model, criterion, dataset, vs,
                                   collate_fn=collate_fn)
     elif approx_type == "lissa":
         return get_inverse_hvp_lissa(model, criterion, dataset, vs,
-                                     **approx_params, collate_fn=collate_fn)
+                                     **approx_params,
+                                     collate_fn=collate_fn,
+                                     has_label=has_label)
     else:
         raise NotImplementedError("ERROR: Only types 'cg' and 'lissa' are supported")
 
         
 def get_inverse_hvp_cg(model, criterion, dataset, vs,
-                       collate_fn=None):
+                       collate_fn=None, has_label=True):
     """
     Compute the product of inverse hessian of empirical risk
     and the given vector 'v' using conjugate gradient method.
@@ -66,6 +71,7 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
                           num_repeats=1,
                           recursion_depth=10000,
                           collate_fn=None,
+                          has_label=True,
                           verbose=False):
     """
     Compute the product of inverse hessian of empirical risk
@@ -86,7 +92,10 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
     
     assert batch_size <= len(dataset), \
         "ERROR: Minibatch size for LiSSA should be less than dataset size"
-    
+
+    assert len(dataset) % batch_size == 0, \
+        "ERROR: Dataset size for LiSSA should be a multiple of minibatch size"
+
     params = list(model.parameters())
     
     assert isinstance(dataset, Dataset), "ERROR: `dataset` must be PyTorch Dataset"
@@ -97,16 +106,19 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
         cur_estimate = vs
         data_iter = iter(data_loader)   # To allow for multiple cycles through data_loader
         for it in range(recursion_depth):
+            batch = None
             try:
-                batch_inputs, batch_targets = next(data_iter)
+                batch = next(data_iter)
             except StopIteration:
                 data_iter = iter(data_loader)
-                batch_inputs, batch_targets = next(data_iter)
+                batch = next(data_iter)
 
-            if collate_fn is not None:
-                batch_inputs, batch_targets = collate_fn(batch_inputs, batch_targets)
-
-            loss = criterion(model(batch_inputs), batch_targets) / batch_size
+            if has_label:
+                batch_inputs, batch_targets = batch
+                loss = criterion(model(batch_inputs), batch_targets) / batch_size
+            else:
+                batch_inputs = batch
+                loss = criterion(model(batch_inputs)) / batch_size
 
             hvp = hessian_vector_product(loss, params, vs=cur_estimate)
             cur_estimate = [v + (1-damping) * ce - hv / scale \

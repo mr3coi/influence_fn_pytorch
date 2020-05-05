@@ -100,10 +100,6 @@ def get_influence2(
 	'''
 	params = list(model.parameters())
 
-	# Consider each of the whole training set if not specified
-	if train_indices is None:
-		train_indices = np.arange(len(train_dataset))
-
 	train_loader = DataLoader(train_dataset, batch_size=batch_size,
 							  shuffle=False, collate_fn=collate_fn)
 	test_loader = DataLoader(test_dataset, batch_size=batch_size,
@@ -121,7 +117,7 @@ def get_influence2(
 			batch_loss = criterion(model(batch_x), batch_y)
 		else:
 			batch_x = test_batch
-			batch_loss = criterion(batch_x)
+			batch_loss = criterion(model(batch_x))
 		batch_grads = grad(batch_loss, params)
 		if test_grads is None:
 			test_grads = [g * batch_x.shape[0] for g in batch_grads]
@@ -144,7 +140,8 @@ def get_influence2(
 					vs=test_grads,
 					approx_type=approx_type,
 					approx_params=approx_params,
-					collate_fn=collate_fn)
+					collate_fn=collate_fn,
+					has_label=has_label)
 
 	if verbose:
 		print(">>> Computing inverse HVPs complete, "
@@ -153,9 +150,24 @@ def get_influence2(
 	# 3. Compute inf_up_loss for individual training points
 	IF_values = []
 	inf_start = time()
-	for idx, train_idx in enumerate(train_indices):
-		input, target = train_dataset[train_idx:(train_idx+1)]	# To keep batch dimension
-		single_loss = criterion(model(input), target)
+
+	# Consider each of the whole training set if not specified
+	if train_indices is not None:
+		train_dataset = train_dataset[train_indices]
+	train_indiv_loader = DataLoader(train_dataset,
+									batch_size=1,
+									shuffle=False,
+									collate_fn=collate_fn)
+
+	for idx, train_pt in enumerate(train_indiv_loader):
+		#train_pt = train_dataset[train_idx:(train_idx+1)]	# To keep batch dimension
+		single_loss = None
+		if has_label:
+			input, target = train_pt
+			single_loss = criterion(model(input), target)
+		else:
+			input = train_pt
+			single_loss = criterion(model(input))
 		single_grad = grad(single_loss, params)
 		IF_values.append(torch.sum(
 					torch.stack(
