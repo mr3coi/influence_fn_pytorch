@@ -89,19 +89,19 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
     :returns: list of inverse-hvps computed per each param
     """
     inverse_hvp = None
-    
+
     assert batch_size <= len(dataset), \
         "ERROR: Minibatch size for LiSSA should be less than dataset size"
 
     assert len(dataset) % batch_size == 0, \
         "ERROR: Dataset size for LiSSA should be a multiple of minibatch size"
 
-    params = list(model.parameters())
-    
+    params = [param for param in model.parameters() if param.requires_grad]
+
     assert isinstance(dataset, Dataset), "ERROR: `dataset` must be PyTorch Dataset"
     data_loader = DataLoader(dataset, batch_size=batch_size,
                              shuffle=True, collate_fn=collate_fn)
-        
+
     for rep in range(num_repeats):
         cur_estimate = vs
         data_iter = iter(data_loader)   # To allow for multiple cycles through data_loader
@@ -113,12 +113,16 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
                 data_iter = iter(data_loader)
                 batch = next(data_iter)
 
-            if has_label:
-                batch_inputs, batch_targets = batch
-                loss = criterion(model(batch_inputs), batch_targets) / batch_size
+            if criterion is not None:
+                if has_label:
+                    batch_inputs, batch_targets = batch
+                    loss = criterion(model(batch_inputs), batch_targets) / batch_size
+                else:
+                    batch_inputs = batch[0]
+                    loss = criterion(model(batch_inputs)) / batch_size
             else:
-                batch_inputs = batch
-                loss = criterion(model(batch_inputs)) / batch_size
+                batch_inputs = batch[0]
+                loss = torch.mean(model(batch_inputs).view(-1), dim=0)
 
             hvp = hessian_vector_product(loss, params, vs=cur_estimate)
             cur_estimate = [v + (1-damping) * ce - hv / scale \

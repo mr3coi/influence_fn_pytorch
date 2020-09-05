@@ -79,7 +79,9 @@ def get_influence2(
 		train_indices=None,		# `train_idx`
 		#test_indices=None,		# `test_indices` => unnecessary
 		criterion=nn.MSELoss(),
-		batch_size=1,
+		batch_size=None,
+		train_batch_size=1,
+		test_batch_size=1,
 		collate_fn=None,
 		approx_type='lissa',
 		approx_params=None,
@@ -90,6 +92,9 @@ def get_influence2(
 	Close translation of `get_influence_on_test_loss` method in the
 	original source code.
 
+	NOTE: Set `criterion` to `None` to calculate IF w.r.t. model output
+		  (which must be a scalar)
+
 	:train_dataset: Contains train data points used to train the model.
 			Of type `torch.utils.data.Dataset` or its subclass.
 	:test_dataset: Contains test data points of interest
@@ -98,11 +103,16 @@ def get_influence2(
 	:train_indices: Indices of training points for which influence is computed.
 			Set to all possible indices in `train_dataset` if unspecified.
 	'''
-	params = list(model.parameters())
+	params = [param for param in model.parameters() if param.requires_grad]
 
-	train_loader = DataLoader(train_dataset, batch_size=batch_size,
-							  shuffle=False, collate_fn=collate_fn)
-	test_loader = DataLoader(test_dataset, batch_size=batch_size,
+	if criterion is None:
+		assert test_batch_size == 1, "ERROR: When computing IF w.r.t. model output, \
+			batch size must be 1 to have scalar output"
+
+	if batch_size is not None:
+		train_batch_size = test_batch_size = batch_size
+
+	test_loader = DataLoader(test_dataset, batch_size=test_batch_size,
 							 shuffle=False, collate_fn=collate_fn)
 
 	# 1. Compute test gradients
@@ -111,13 +121,17 @@ def get_influence2(
 	test_grad_start = time()
 
 	for test_batch in test_loader:
-		batch_x = None; batch_y = None
-		if has_label:
-			batch_x, batch_y = test_batch
-			batch_loss = criterion(model(batch_x), batch_y)
+		if criterion is not None:
+			if has_label:
+				batch_x, batch_y = test_batch
+				batch_loss = criterion(model(batch_x), batch_y)
+			else:
+				batch_x = test_batch[0]
+				batch_loss = criterion(model(batch_x))
 		else:
-			batch_x = test_batch
-			batch_loss = criterion(model(batch_x))
+			batch_x = test_batch[0]
+			batch_loss = torch.mean(model(batch_x).view(-1), dim=0)
+
 		batch_grads = grad(batch_loss, params)
 		if test_grads is None:
 			test_grads = [g * batch_x.shape[0] for g in batch_grads]
@@ -154,20 +168,24 @@ def get_influence2(
 	# Consider each of the whole training set if not specified
 	if train_indices is not None:
 		train_dataset = train_dataset[train_indices]
-	train_indiv_loader = DataLoader(train_dataset,
-									batch_size=1,
-									shuffle=False,
-									collate_fn=collate_fn)
+	train_loader = DataLoader(train_dataset,
+							  batch_size=train_batch_size,
+							  shuffle=False,
+							  collate_fn=collate_fn)
 
-	for idx, train_pt in enumerate(train_indiv_loader):
+	for idx, train_pt in enumerate(train_loader):
 		#train_pt = train_dataset[train_idx:(train_idx+1)]	# To keep batch dimension
 		single_loss = None
-		if has_label:
-			input, target = train_pt
-			single_loss = criterion(model(input), target)
+		if criterion is not None:
+			if has_label:
+				input, target = train_pt
+				single_loss = criterion(model(input), target)
+			else:
+				input = train_pt[0]
+				single_loss = criterion(model(input))
 		else:
-			input = train_pt
-			single_loss = criterion(model(input))
+			input = train_pt[0]
+			single_loss = torch.mean(model(input).view(-1))
 		single_grad = grad(single_loss, params)
 		IF_values.append(torch.sum(
 					torch.stack(
