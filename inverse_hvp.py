@@ -88,8 +88,7 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
     :recursion_depth: number of iterations for LiSSA algorithm
     :returns: list of inverse-hvps computed per each param
     """
-    inverse_hvp = None
-
+    assert criterion is not None, "Provide the criterion used to train model"
     assert batch_size <= len(dataset), \
         "ERROR: Minibatch size for LiSSA should be less than dataset size"
 
@@ -101,6 +100,7 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
     assert isinstance(dataset, Dataset), "ERROR: `dataset` must be PyTorch Dataset"
     data_loader = DataLoader(dataset, batch_size=batch_size,
                              shuffle=True, collate_fn=collate_fn)
+    inverse_hvp = None
 
     for rep in range(num_repeats):
         cur_estimate = vs
@@ -113,16 +113,15 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
                 data_iter = iter(data_loader)
                 batch = next(data_iter)
 
-            if criterion is not None:
-                if has_label:
-                    batch_inputs, batch_targets = batch
-                    loss = criterion(model(batch_inputs), batch_targets) / batch_size
-                else:
-                    batch_inputs = batch[0]
-                    loss = criterion(model(batch_inputs)) / batch_size
+            if has_label:
+                batch_inputs, batch_targets = batch
+                batch_out = model(batch_inputs)
+                assert batch_out.shape == batch_targets.shape, \
+                    "Model output and label should have the same shape"
+                loss = criterion(batch_out, batch_targets) / batch_size
             else:
                 batch_inputs = batch[0]
-                loss = torch.mean(model(batch_inputs).view(-1), dim=0)
+                loss = criterion(model(batch_inputs)) / batch_size
 
             hvp = hessian_vector_product(loss, params, vs=cur_estimate)
             cur_estimate = [v + (1-damping) * ce - hv / scale \

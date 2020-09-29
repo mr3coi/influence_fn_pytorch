@@ -79,13 +79,16 @@ def get_influence2(
 		train_indices=None,		# `train_idx`
 		#test_indices=None,		# `test_indices` => unnecessary
 		criterion=nn.MSELoss(),
+		test_fn=nn.MSELoss(),
+		is_scalar=False,
 		batch_size=None,
 		train_batch_size=1,
 		test_batch_size=1,
 		collate_fn=None,
 		approx_type='lissa',
 		approx_params=None,
-		has_label=True,
+		train_has_label=True,
+		test_has_label=True,
 		verbose=False):
 	'''Computes the $inf_{up,loss}$ of each training point specified
 	in `train_indices` with respect to all test points in `test_dataset`.
@@ -105,12 +108,12 @@ def get_influence2(
 	'''
 	params = [param for param in model.parameters() if param.requires_grad]
 
-	if criterion is None:
-		assert test_batch_size == 1, "ERROR: When computing IF w.r.t. model output, \
-			batch size must be 1 to have scalar output"
-
 	if batch_size is not None:
 		train_batch_size = test_batch_size = batch_size
+
+	if test_fn is None:
+		assert is_scalar, "Model must output a scalar value"
+		assert not test_has_label, "Test label requires test_fn"
 
 	test_loader = DataLoader(test_dataset, batch_size=test_batch_size,
 							 shuffle=False, collate_fn=collate_fn)
@@ -119,20 +122,25 @@ def get_influence2(
 	test_grads = None	# `test_grad_loss_no_reg_val`
 	batch_loss = None	# `temp`
 	test_grad_start = time()
+	test_grads = None
 
 	for test_batch in test_loader:
-		if criterion is not None:
-			if has_label:
+		if test_fn is not None:
+			if test_has_label:
 				batch_x, batch_y = test_batch
-				batch_loss = criterion(model(batch_x), batch_y)
+				batch_out = model(batch_x)
+				assert batch_out.shape == batch_y.shape, \
+					"Model output and label should have the same shape"
+				batch_out = test_fn(batch_out, batch_y)
 			else:
 				batch_x = test_batch[0]
-				batch_loss = criterion(model(batch_x))
+				batch_out = test_fn(model(batch_x))
 		else:
 			batch_x = test_batch[0]
-			batch_loss = torch.mean(model(batch_x).view(-1), dim=0)
+			batch_out = torch.mean(model(batch_x))
+		assert batch_out.shape == torch.Size([]), "Agg. test output should be a scalar"
 
-		batch_grads = grad(batch_loss, params)
+		batch_grads = grad(batch_out, params)
 		if test_grads is None:
 			test_grads = [g * batch_x.shape[0] for g in batch_grads]
 		else:
@@ -155,7 +163,7 @@ def get_influence2(
 					approx_type=approx_type,
 					approx_params=approx_params,
 					collate_fn=collate_fn,
-					has_label=has_label)
+					has_label=train_has_label)
 
 	if verbose:
 		print(">>> Computing inverse HVPs complete, "
@@ -177,7 +185,7 @@ def get_influence2(
 		#train_pt = train_dataset[train_idx:(train_idx+1)]	# To keep batch dimension
 		single_loss = None
 		if criterion is not None:
-			if has_label:
+			if train_has_label:
 				input, target = train_pt
 				single_loss = criterion(model(input), target)
 			else:
