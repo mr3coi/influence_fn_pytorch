@@ -7,12 +7,11 @@ from time import time
 
 from influence_fn_pytorch.inverse_hvp import get_inverse_hvp
 
-def get_influence2(
+def get_influence(
 		model,
 		train_dataset,
 		test_dataset,			# Should account for `test_indices`
 		train_indices=None,		# `train_idx`
-		#test_indices=None,		# `test_indices` => unnecessary
 		criterion=nn.MSELoss(),
 		test_fn=nn.MSELoss(),
 		is_scalar=False,
@@ -30,16 +29,33 @@ def get_influence2(
 	Close translation of `get_influence_on_test_loss` method in the
 	original source code.
 
-	NOTE: Set `criterion` to `None` to calculate IF w.r.t. model output
-		  (which must be a scalar)
+	NOTE: Set `test_fn` to `None` to calculate IF w.r.t. model output
+		  (which must be a scalar, which you should confirm by setting
+		  `is_scalar` to True)
 
 	:train_dataset: Contains train data points used to train the model.
-			Of type `torch.utils.data.Dataset` or its subclass.
+					Of type `torch.utils.data.Dataset` or its subclass.
 	:test_dataset: Contains test data points of interest
-	 		(corresponds to `test_indices` in original code).
-			Of type `torch.utils.data.Dataset` or its subclass.
+				   (corresponds to `test_indices` in original code).
+				   Of type `torch.utils.data.Dataset` or its subclass.
 	:train_indices: Indices of training points for which influence is computed.
-			Set to all possible indices in `train_dataset` if unspecified.
+				    Set to all possible indices in `train_dataset` if unspecified.
+	:criterion: Criterion used to train the model
+	:test_fn: Fn of test points to compute IF for (may be the same as criterion)
+	:is_scalar: To confirm whether the model outputs a scalar value
+				(serves as a checklist, only used in assertion)
+	:batch_size: Set only if both train and test batch sizes are to be set equally
+	:train_batch_size: Size of training points batch to compute IF w.r.t.
+	:test_batch_size: Batch size for computing aggregation of test pt gradients
+					  (solely for speeding-up purposes)
+	:collate_fn: For building DataLoaders from provided Datasets
+	:approx_type: Approximation strategy for inverse-Hvp
+	:approx_params: Dict of parameters needed for the approximation strategy
+	:train_has_label: Whether `criterion` is binary operator (requires labels)
+	:test_has_label: Whether `test_fn` is binary operator (requires labels)
+	:verbose: Verbosity; prints duration of each step if True
+	:returns: 1-D torch.Tensor containing IF values of test points as a whole
+			  w.r.t. each batch of training points
 	'''
 	params = [param for param in model.parameters() if param.requires_grad]
 
@@ -54,8 +70,6 @@ def get_influence2(
 							 shuffle=False, collate_fn=collate_fn)
 
 	# 1. Compute test gradients
-	test_grads = None	# `test_grad_loss_no_reg_val`
-	batch_loss = None	# `temp`
 	test_grad_start = time()
 	test_grads = None
 
@@ -117,8 +131,6 @@ def get_influence2(
 							  collate_fn=collate_fn)
 
 	for idx, train_pt in enumerate(train_loader):
-		#train_pt = train_dataset[train_idx:(train_idx+1)]	# To keep batch dimension
-		single_loss = None
 		if criterion is not None:
 			if train_has_label:
 				input, target = train_pt

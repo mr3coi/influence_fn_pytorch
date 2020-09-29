@@ -33,8 +33,7 @@ def get_inverse_hvp(model, criterion, dataset, vs,
     :vs: list of vectors in the inverse-hvp, one per each parameter
     :approx_type: choice of method, 'cg' or 'lissa'
     :approx_params: parameters specific to 'lissa' method
-    :collate_fn: function to preprocess each minibatch
-            from `dataset`
+    :collate_fn: function to preprocess each minibatch from `dataset`
     :returns: list of inverse-hvps computed per each param
     """
     if approx_type == "cg":
@@ -51,8 +50,7 @@ def get_inverse_hvp(model, criterion, dataset, vs,
         
 def get_inverse_hvp_cg(model, criterion, dataset, vs,
                        collate_fn=None, has_label=True):
-    """
-    Compute the product of inverse hessian of empirical risk
+    """Compute the product of inverse hessian of empirical risk
     and the given vector 'v' using conjugate gradient method.
     
     :model, criterion, dataset: needed to compute empirical risk
@@ -73,12 +71,11 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
                           collate_fn=None,
                           has_label=True,
                           verbose=False):
-    """
-    Compute the product of inverse hessian of empirical risk
+    """Compute the product of inverse hessian of empirical risk
     and the given vector 'v' numerically using LiSSA algorithm.
     
     :model: the model of interest
-    :criterion: the objective used to compute loss
+    :criterion: the objective used to train the given model
     :inputs, targets: dataset to compute loss with
     :vs: list of vectors in the inverse-hvp, one per each parameter
     :batch_size: size of minibatch sample at each iteration
@@ -91,13 +88,12 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
     assert criterion is not None, "Provide the criterion used to train model"
     assert batch_size <= len(dataset), \
         "ERROR: Minibatch size for LiSSA should be less than dataset size"
-
     assert len(dataset) % batch_size == 0, \
         "ERROR: Dataset size for LiSSA should be a multiple of minibatch size"
+    assert isinstance(dataset, Dataset), "ERROR: `dataset` must be PyTorch Dataset"
 
     params = [param for param in model.parameters() if param.requires_grad]
 
-    assert isinstance(dataset, Dataset), "ERROR: `dataset` must be PyTorch Dataset"
     data_loader = DataLoader(dataset, batch_size=batch_size,
                              shuffle=True, collate_fn=collate_fn)
     inverse_hvp = None
@@ -106,7 +102,6 @@ def get_inverse_hvp_lissa(model, criterion, dataset, vs,
         cur_estimate = vs
         data_iter = iter(data_loader)   # To allow for multiple cycles through data_loader
         for it in range(recursion_depth):
-            batch = None
             try:
                 batch = next(data_iter)
             except StopIteration:
